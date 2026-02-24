@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: ./services/api
+    container_name: shukatsu-api
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./services/api/.env
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./apps/web
+    container_name: shukatsu-web
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./apps/web/.env
+    depends_on:
+      - api
+    restart: unless-stopped
