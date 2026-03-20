@@ -3,39 +3,130 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"errors"
-	"time"
 
-	"shukatsu-flow/api/internal/clock"
 	"shukatsu-flow/api/internal/domain/model"
+	companyUsecase "shukatsu-flow/api/internal/usecase/company"
 )
 
 type CompanyRepository struct {
-	db  *sql.DB
-	clk clock.Clock
+	databaseConnection *sql.DB
 }
 
-func NewCompanyRepository(db *sql.DB, clk clock.Clock) *CompanyRepository {
-	return &CompanyRepository{db: db, clk: clk}
+var _ companyUsecase.Repository = (*CompanyRepository)(nil)
+
+func NewCompanyRepository(databaseConnection *sql.DB) *CompanyRepository {
+	return &CompanyRepository{
+		databaseConnection: databaseConnection,
+	}
 }
 
-func (r *CompanyRepository) Create(ctx context.Context, name string) (model.Company, error) {
-	const q = `
-INSERT INTO companies (name)
-VALUES ($1)
-RETURNING id, name, created_at;
-`
-	var c model.Company
-	if err := r.db.QueryRowContext(ctx, q, name).Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return model.Company{}, errors.New("failed to insert company")
+func (companyRepository *CompanyRepository) ListCompanies(
+	contextObject context.Context,
+) ([]model.Company, error) {
+	query := `
+		SELECT
+			id,
+			name,
+			industry,
+			job_type,
+			preference_level,
+			memo,
+			created_at,
+			updated_at
+		FROM companies
+		ORDER BY created_at DESC
+	`
+
+	rows, queryError := companyRepository.databaseConnection.QueryContext(contextObject, query)
+	if queryError != nil {
+		return nil, queryError
+	}
+	defer rows.Close()
+
+	companies := []model.Company{}
+
+	for rows.Next() {
+		var company model.Company
+
+		scanError := rows.Scan(
+			&company.Id,
+			&company.Name,
+			&company.Industry,
+			&company.JobType,
+			&company.PreferenceLevel,
+			&company.Memo,
+			&company.CreatedAt,
+			&company.UpdatedAt,
+		)
+		if scanError != nil {
+			return nil, scanError
 		}
-		return model.Company{}, err
+
+		companies = append(companies, company)
 	}
 
-	if c.CreatedAt.IsZero() {
-		// DBが返さない設計でも落ちないように保険
-		c.CreatedAt = time.Now()
+	if rowsError := rows.Err(); rowsError != nil {
+		return nil, rowsError
 	}
-	return c, nil
+
+	return companies, nil
+}
+
+func (companyRepository *CompanyRepository) CreateCompany(
+	contextObject context.Context,
+	company model.Company,
+) (model.Company, error) {
+	query := `
+		INSERT INTO companies (
+			id,
+			name,
+			industry,
+			job_type,
+			preference_level,
+			memo,
+			created_at,
+			updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING
+			id,
+			name,
+			industry,
+			job_type,
+			preference_level,
+			memo,
+			created_at,
+			updated_at
+	`
+
+	var createdCompany model.Company
+
+	queryRow := companyRepository.databaseConnection.QueryRowContext(
+		contextObject,
+		query,
+		company.Id,
+		company.Name,
+		company.Industry,
+		company.JobType,
+		company.PreferenceLevel,
+		company.Memo,
+		company.CreatedAt,
+		company.UpdatedAt,
+	)
+
+	scanError := queryRow.Scan(
+		&createdCompany.Id,
+		&createdCompany.Name,
+		&createdCompany.Industry,
+		&createdCompany.JobType,
+		&createdCompany.PreferenceLevel,
+		&createdCompany.Memo,
+		&createdCompany.CreatedAt,
+		&createdCompany.UpdatedAt,
+	)
+	if scanError != nil {
+		return model.Company{}, scanError
+	}
+
+	return createdCompany, nil
 }

@@ -2,18 +2,44 @@ package postgres
 
 import (
 	"database/sql"
+	"errors"
+	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/lib/pq"
+
+	"shukatsu-flow/api/internal/config"
 )
 
-func Open(databaseURL string) (*sql.DB, error) {
-	db, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		return nil, err
+var ErrDatabaseURLIsRequired = errors.New("DATABASE_URL is required")
+
+func NewConnection() (*sql.DB, error) {
+	databaseURL := config.GetEnv("DATABASE_URL", "")
+	if databaseURL == "" {
+		return nil, ErrDatabaseURLIsRequired
 	}
-	if err := db.Ping(); err != nil {
-		_ = db.Close()
-		return nil, err
+
+	databaseConnection, openError := sql.Open("postgres", databaseURL)
+	if openError != nil {
+		return nil, openError
 	}
-	return db, nil
+
+	configureConnectionPool(databaseConnection)
+
+	pingError := databaseConnection.Ping()
+	if pingError != nil {
+		closeError := databaseConnection.Close()
+		if closeError != nil {
+			return nil, closeError
+		}
+		return nil, pingError
+	}
+
+	return databaseConnection, nil
+}
+
+func configureConnectionPool(databaseConnection *sql.DB) {
+	databaseConnection.SetMaxOpenConns(10)
+	databaseConnection.SetMaxIdleConns(5)
+	databaseConnection.SetConnMaxLifetime(5 * time.Minute)
+	databaseConnection.SetConnMaxIdleTime(2 * time.Minute)
 }

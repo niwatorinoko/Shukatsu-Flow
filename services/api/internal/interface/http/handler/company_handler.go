@@ -1,40 +1,83 @@
 package handler
 
 import (
-	"encoding/json"
-	"net/http"
+	"errors"
+	nethttp "net/http"
 
-	"shukatsu-flow/api/internal/interface/http/request"
-	"shukatsu-flow/api/internal/interface/http/response"
-	"shukatsu-flow/api/internal/usecase/company"
+	"github.com/labstack/echo/v4"
+
+	gen "shukatsu-flow/api/internal/interface/http/gen"
+	httpMapper "shukatsu-flow/api/internal/interface/http/mapper"
+	companyUsecase "shukatsu-flow/api/internal/usecase/company"
 )
 
 type CompanyHandler struct {
-	uc *company.Usecase
+	companyUsecase companyUsecase.Usecase
 }
 
-func NewCompanyHandler(uc *company.Usecase) *CompanyHandler {
-	return &CompanyHandler{uc: uc}
+var _ gen.ServerInterface = (*CompanyHandler)(nil)
+
+func NewCompanyHandler(companyUsecase companyUsecase.Usecase) *CompanyHandler {
+	return &CompanyHandler{
+		companyUsecase: companyUsecase,
+	}
 }
 
-func (h *CompanyHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var req request.CreateCompanyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json"})
-		return
+func (companyHandler *CompanyHandler) ListCompanies(context echo.Context) error {
+	companies, listCompaniesError := companyHandler.companyUsecase.ListCompanies(
+		context.Request().Context(),
+	)
+	if listCompaniesError != nil {
+		return context.JSON(
+			nethttp.StatusInternalServerError,
+			httpMapper.ToErrorResponse("INTERNAL_SERVER_ERROR", "failed to list companies"),
+		)
 	}
 
-	c, err := h.uc.CreateCompany(r.Context(), req.Name)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
+	companiesListResponse := httpMapper.ToCompaniesListResponse(companies)
 
-	writeJSON(w, http.StatusCreated, response.FromCompany(c))
+	return context.JSON(nethttp.StatusOK, companiesListResponse)
 }
 
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+func (companyHandler *CompanyHandler) CreateCompany(context echo.Context) error {
+	var createCompanyRequest httpMapper.CreateCompanyRequest
+
+	bindRequestError := context.Bind(&createCompanyRequest)
+	if bindRequestError != nil {
+		return context.JSON(
+			nethttp.StatusBadRequest,
+			httpMapper.ToErrorResponse("INVALID_REQUEST", "request body is invalid"),
+		)
+	}
+
+	createCompanyInput := httpMapper.ToCreateCompanyInput(createCompanyRequest)
+
+	createdCompany, createCompanyError := companyHandler.companyUsecase.CreateCompany(
+		context.Request().Context(),
+		createCompanyInput,
+	)
+	if createCompanyError != nil {
+		if errors.Is(createCompanyError, companyUsecase.ErrCompanyNameIsRequired) {
+			return context.JSON(
+				nethttp.StatusBadRequest,
+				httpMapper.ToErrorResponse("INVALID_REQUEST", createCompanyError.Error()),
+			)
+		}
+
+		if errors.Is(createCompanyError, companyUsecase.ErrPreferenceLevelMustBeBetweenOneAndFive) {
+			return context.JSON(
+				nethttp.StatusBadRequest,
+				httpMapper.ToErrorResponse("INVALID_REQUEST", createCompanyError.Error()),
+			)
+		}
+
+		return context.JSON(
+			nethttp.StatusInternalServerError,
+			httpMapper.ToErrorResponse("INTERNAL_SERVER_ERROR", "failed to create company"),
+		)
+	}
+
+	companyResponse := httpMapper.ToCompanyResponse(createdCompany)
+
+	return context.JSON(nethttp.StatusCreated, companyResponse)
 }

@@ -4,25 +4,82 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 
 	"shukatsu-flow/api/internal/domain/model"
 )
 
-type Usecase struct {
-	repo Repository
+var ErrCompanyNameIsRequired = errors.New("company name is required")
+var ErrPreferenceLevelMustBeBetweenOneAndFive = errors.New("preference level must be between 1 and 5")
+
+type CreateCompanyInput struct {
+	Name            string
+	Industry        *string
+	JobType         *string
+	PreferenceLevel *int
+	Memo            *string
 }
 
-func NewUsecase(repo Repository) *Usecase {
-	return &Usecase{repo: repo}
+type Usecase interface {
+	ListCompanies(context.Context) ([]model.Company, error)
+	CreateCompany(context.Context, CreateCompanyInput) (model.Company, error)
 }
 
-func (u *Usecase) CreateCompany(ctx context.Context, name string) (model.Company, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return model.Company{}, errors.New("name is required")
+type usecase struct {
+	companyRepository Repository
+}
+
+func NewUsecase(companyRepository Repository) Usecase {
+	return &usecase{
+		companyRepository: companyRepository,
 	}
-	if len(name) > 100 {
-		return model.Company{}, errors.New("name is too long (max 100)")
+}
+
+func (companyUsecase *usecase) ListCompanies(
+	contextObject context.Context,
+) ([]model.Company, error) {
+	companies, listCompaniesError := companyUsecase.companyRepository.ListCompanies(contextObject)
+	if listCompaniesError != nil {
+		return nil, listCompaniesError
 	}
-	return u.repo.Create(ctx, name)
+
+	return companies, nil
+}
+
+func (companyUsecase *usecase) CreateCompany(
+	contextObject context.Context,
+	createCompanyInput CreateCompanyInput,
+) (model.Company, error) {
+	trimmedCompanyName := strings.TrimSpace(createCompanyInput.Name)
+	if trimmedCompanyName == "" {
+		return model.Company{}, ErrCompanyNameIsRequired
+	}
+
+	if createCompanyInput.PreferenceLevel != nil {
+		if *createCompanyInput.PreferenceLevel < 1 || *createCompanyInput.PreferenceLevel > 5 {
+			return model.Company{}, ErrPreferenceLevelMustBeBetweenOneAndFive
+		}
+	}
+
+	currentTime := time.Now().UTC()
+
+	company := model.Company{
+		Id:              uuid.NewString(),
+		Name:            trimmedCompanyName,
+		Industry:        createCompanyInput.Industry,
+		JobType:         createCompanyInput.JobType,
+		PreferenceLevel: createCompanyInput.PreferenceLevel,
+		Memo:            createCompanyInput.Memo,
+		CreatedAt:       currentTime,
+		UpdatedAt:       currentTime,
+	}
+
+	createdCompany, createCompanyError := companyUsecase.companyRepository.CreateCompany(contextObject, company)
+	if createCompanyError != nil {
+		return model.Company{}, createCompanyError
+	}
+
+	return createdCompany, nil
 }

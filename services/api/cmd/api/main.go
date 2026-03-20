@@ -2,50 +2,41 @@ package main
 
 import (
 	"log"
-	"net/http"
-	"time"
 
-	"shukatsu-flow/api/internal/clock"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+
 	"shukatsu-flow/api/internal/config"
-	"shukatsu-flow/api/internal/infrastructure/db/postgres"
-	postgresrepo "shukatsu-flow/api/internal/infrastructure/repository/postgres"
-	"shukatsu-flow/api/internal/interface/http/router"
-	"shukatsu-flow/api/internal/usecase/company"
+	postgresdb "shukatsu-flow/api/internal/infrastructure/db/postgres"
+	postgresrepository "shukatsu-flow/api/internal/infrastructure/repository/postgres"
+	httpHandler "shukatsu-flow/api/internal/interface/http/handler"
+	httpRouter "shukatsu-flow/api/internal/interface/http/router"
+	companyUsecase "shukatsu-flow/api/internal/usecase/company"
 )
 
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("config load failed: %v", err)
+	if envLoadError := config.LoadDotEnv(".env", "services/api/.env"); envLoadError != nil {
+		log.Fatal(envLoadError)
 	}
 
-	db, err := postgres.Open(cfg.DatabaseURL)
-	if err != nil {
-		log.Fatalf("db open failed: %v", err)
+	echoServer := echo.New()
+
+	echoServer.Use(middleware.Logger())
+	echoServer.Use(middleware.Recover())
+
+	databaseConnection, databaseConnectionError := postgresdb.NewConnection()
+	if databaseConnectionError != nil {
+		log.Fatal(databaseConnectionError)
 	}
-	defer db.Close()
+	defer databaseConnection.Close()
 
-	clk := clock.Real{}
+	companyRepository := postgresrepository.NewCompanyRepository(databaseConnection)
+	companyApplicationUsecase := companyUsecase.NewUsecase(companyRepository)
+	companyHandler := httpHandler.NewCompanyHandler(companyApplicationUsecase)
 
-	// Repository
-	companyRepo := postgresrepo.NewCompanyRepository(db, clk)
+	httpRouter.RegisterRoutes(echoServer, companyHandler)
 
-	// Usecase
-	companyUC := company.NewUsecase(companyRepo)
+	appPort := config.GetEnv("APP_PORT", "8080")
 
-	// Router (DI)
-	mux := router.New(router.Dependencies{
-		CompanyUsecase: companyUC,
-	})
-
-	srv := &http.Server{
-		Addr:              ":" + cfg.AppPort,
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-
-	log.Printf("API listening on http://localhost:%s", cfg.AppPort)
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("server stopped: %v", err)
-	}
+	log.Fatal(echoServer.Start(":" + appPort))
 }

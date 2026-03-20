@@ -7,5 +7,6 @@ import (
 )
 
 type Repository interface {
-	Create(ctx context.Context, name string) (model.Company, error)
+	ListCompanies(context.Context) ([]model.Company, error)
+	CreateCompany(context.Context, model.Company) (model.Company, error)
 }
