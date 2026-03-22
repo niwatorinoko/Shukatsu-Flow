@@ -17,6 +17,7 @@ type CreateCompanyRequest struct {
 
 type CompanyResponse struct {
 	Id              string    `json:"id"`
+	UserId          string    `json:"user_id"`
 	Name            string    `json:"name"`
 	Industry        *string   `json:"industry,omitempty"`
 	JobType         *string   `json:"job_type,omitempty"`
@@ -44,9 +45,11 @@ type ErrorResponse struct {
 }
 
 func ToCreateCompanyInput(
+	userId string,
 	createCompanyRequest CreateCompanyRequest,
 ) companyUsecase.CreateCompanyInput {
 	return companyUsecase.CreateCompanyInput{
+		UserId:          userId,
 		Name:            createCompanyRequest.Name,
 		Industry:        createCompanyRequest.Industry,
 		JobType:         createCompanyRequest.JobType,
@@ -58,6 +61,7 @@ func ToCreateCompanyInput(
 func ToCompany(company model.Company) CompanyResponse {
 	return CompanyResponse{
 		Id:              company.Id,
+		UserId:          company.UserId,
 		Name:            company.Name,
 		Industry:        company.Industry,
 		JobType:         company.JobType,

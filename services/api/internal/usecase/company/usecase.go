@@ -13,8 +13,10 @@ import (
 
 var ErrCompanyNameIsRequired = errors.New("company name is required")
 var ErrPreferenceLevelMustBeBetweenOneAndFive = errors.New("preference level must be between 1 and 5")
+var ErrUserIdIsRequired = errors.New("user id is required")
 
 type CreateCompanyInput struct {
+	UserId          string
 	Name            string
 	Industry        *string
 	JobType         *string
@@ -52,6 +54,11 @@ func (companyUsecase *usecase) CreateCompany(
 	contextObject context.Context,
 	createCompanyInput CreateCompanyInput,
 ) (model.Company, error) {
+	trimmedUserId := strings.TrimSpace(createCompanyInput.UserId)
+	if trimmedUserId == "" {
+		return model.Company{}, ErrUserIdIsRequired
+	}
+
 	trimmedCompanyName := strings.TrimSpace(createCompanyInput.Name)
 	if trimmedCompanyName == "" {
 		return model.Company{}, ErrCompanyNameIsRequired
@@ -67,6 +74,7 @@ func (companyUsecase *usecase) CreateCompany(
 
 	company := model.Company{
 		Id:              uuid.NewString(),
+		UserId:          trimmedUserId,
 		Name:            trimmedCompanyName,
 		Industry:        createCompanyInput.Industry,
 		JobType:         createCompanyInput.JobType,

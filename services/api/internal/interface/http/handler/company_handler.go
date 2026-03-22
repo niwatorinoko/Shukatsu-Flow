@@ -6,7 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	gen "shukatsu-flow/api/internal/interface/http/gen"
+	"shukatsu-flow/api/internal/config"
 	httpMapper "shukatsu-flow/api/internal/interface/http/mapper"
 	companyUsecase "shukatsu-flow/api/internal/usecase/company"
 )
@@ -14,8 +14,6 @@ import (
 type CompanyHandler struct {
 	companyUsecase companyUsecase.Usecase
 }
-
-var _ gen.ServerInterface = (*CompanyHandler)(nil)
 
 func NewCompanyHandler(companyUsecase companyUsecase.Usecase) *CompanyHandler {
 	return &CompanyHandler{
@@ -50,13 +48,24 @@ func (companyHandler *CompanyHandler) CreateCompany(context echo.Context) error 
 		)
 	}
 
-	createCompanyInput := httpMapper.ToCreateCompanyInput(createCompanyRequest)
+	temporaryUserId := config.GetEnv("DEV_SUPABASE_USER_ID", "")
+	createCompanyInput := httpMapper.ToCreateCompanyInput(
+		temporaryUserId,
+		createCompanyRequest,
+	)
 
 	createdCompany, createCompanyError := companyHandler.companyUsecase.CreateCompany(
 		context.Request().Context(),
 		createCompanyInput,
 	)
 	if createCompanyError != nil {
+		if errors.Is(createCompanyError, companyUsecase.ErrUserIdIsRequired) {
+			return context.JSON(
+				nethttp.StatusBadRequest,
+				httpMapper.ToErrorResponse("INVALID_REQUEST", createCompanyError.Error()),
+			)
+		}
+
 		if errors.Is(createCompanyError, companyUsecase.ErrCompanyNameIsRequired) {
 			return context.JSON(
 				nethttp.StatusBadRequest,
@@ -71,13 +80,16 @@ func (companyHandler *CompanyHandler) CreateCompany(context echo.Context) error 
 			)
 		}
 
+		context.Logger().Errorf("failed to create company: %v", createCompanyError)
+
 		return context.JSON(
 			nethttp.StatusInternalServerError,
 			httpMapper.ToErrorResponse("INTERNAL_SERVER_ERROR", "failed to create company"),
 		)
 	}
 
-	companyResponse := httpMapper.ToCompanyResponse(createdCompany)
-
-	return context.JSON(nethttp.StatusCreated, companyResponse)
+	return context.JSON(
+		nethttp.StatusCreated,
+		httpMapper.ToCompanyResponse(createdCompany),
+	)
 }

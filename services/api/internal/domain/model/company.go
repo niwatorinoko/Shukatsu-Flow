@@ -4,6 +4,7 @@ import "time"
 
 type Company struct {
 	Id              string
+	UserId          string
 	Name            string
 	Industry        *string
 	JobType         *string

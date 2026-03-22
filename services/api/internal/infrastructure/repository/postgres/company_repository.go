@@ -26,6 +26,7 @@ func (companyRepository *CompanyRepository) ListCompanies(
 	query := `
 		SELECT
 			id,
+			user_id,
 			name,
 			industry,
 			job_type,
@@ -50,6 +51,7 @@ func (companyRepository *CompanyRepository) ListCompanies(
 
 		scanError := rows.Scan(
 			&company.Id,
+			&company.UserId,
 			&company.Name,
 			&company.Industry,
 			&company.JobType,
@@ -79,6 +81,7 @@ func (companyRepository *CompanyRepository) CreateCompany(
 	query := `
 		INSERT INTO companies (
 			id,
+			user_id,
 			name,
 			industry,
 			job_type,
@@ -87,9 +90,10 @@ func (companyRepository *CompanyRepository) CreateCompany(
 			created_at,
 			updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING
 			id,
+			user_id,
 			name,
 			industry,
 			job_type,
@@ -105,6 +109,7 @@ func (companyRepository *CompanyRepository) CreateCompany(
 		contextObject,
 		query,
 		company.Id,
+		company.UserId,
 		company.Name,
 		company.Industry,
 		company.JobType,
@@ -116,6 +121,7 @@ func (companyRepository *CompanyRepository) CreateCompany(
 
 	scanError := queryRow.Scan(
 		&createdCompany.Id,
+		&createdCompany.UserId,
 		&createdCompany.Name,
 		&createdCompany.Industry,
 		&createdCompany.JobType,
