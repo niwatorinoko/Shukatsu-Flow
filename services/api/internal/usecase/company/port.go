@@ -7,6 +7,6 @@ import (
 )
 
 type Repository interface {
-	ListCompanies(context.Context) ([]model.Company, error)
+	ListCompaniesByUserId(context.Context, string) ([]model.Company, error)
 	CreateCompany(context.Context, model.Company) (model.Company, error)
 }

@@ -25,7 +25,7 @@ type CreateCompanyInput struct {
 }
 
 type Usecase interface {
-	ListCompanies(context.Context) ([]model.Company, error)
+	ListCompanies(context.Context, string) ([]model.Company, error)
 	CreateCompany(context.Context, CreateCompanyInput) (model.Company, error)
 }
 
@@ -41,8 +41,17 @@ func NewUsecase(companyRepository Repository) Usecase {
 
 func (companyUsecase *usecase) ListCompanies(
 	contextObject context.Context,
+	userId string,
 ) ([]model.Company, error) {
-	companies, listCompaniesError := companyUsecase.companyRepository.ListCompanies(contextObject)
+	trimmedUserId := strings.TrimSpace(userId)
+	if trimmedUserId == "" {
+		return nil, ErrUserIdIsRequired
+	}
+
+	companies, listCompaniesError := companyUsecase.companyRepository.ListCompaniesByUserId(
+		contextObject,
+		trimmedUserId,
+	)
 	if listCompaniesError != nil {
 		return nil, listCompaniesError
 	}

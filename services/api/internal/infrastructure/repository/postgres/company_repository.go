@@ -20,8 +20,9 @@ func NewCompanyRepository(databaseConnection *sql.DB) *CompanyRepository {
 	}
 }
 
-func (companyRepository *CompanyRepository) ListCompanies(
+func (companyRepository *CompanyRepository) ListCompaniesByUserId(
 	contextObject context.Context,
+	userId string,
 ) ([]model.Company, error) {
 	query := `
 		SELECT
@@ -35,10 +36,15 @@ func (companyRepository *CompanyRepository) ListCompanies(
 			created_at,
 			updated_at
 		FROM companies
+		WHERE user_id = $1
 		ORDER BY created_at DESC
 	`
 
-	rows, queryError := companyRepository.databaseConnection.QueryContext(contextObject, query)
+	rows, queryError := companyRepository.databaseConnection.QueryContext(
+		contextObject,
+		query,
+		userId,
+	)
 	if queryError != nil {
 		return nil, queryError
 	}

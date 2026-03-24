@@ -22,10 +22,23 @@ func NewCompanyHandler(companyUsecase companyUsecase.Usecase) *CompanyHandler {
 }
 
 func (companyHandler *CompanyHandler) ListCompanies(context echo.Context) error {
+	temporaryUserId := config.GetEnv("DEV_SUPABASE_USER_ID", "")
+	// TODO: replace with authenticated user id from middleware context
+
 	companies, listCompaniesError := companyHandler.companyUsecase.ListCompanies(
 		context.Request().Context(),
+		temporaryUserId,
 	)
 	if listCompaniesError != nil {
+		if errors.Is(listCompaniesError, companyUsecase.ErrUserIdIsRequired) {
+			return context.JSON(
+				nethttp.StatusBadRequest,
+				httpMapper.ToErrorResponse("INVALID_REQUEST", listCompaniesError.Error()),
+			)
+		}
+
+		context.Logger().Errorf("failed to list companies: %v", listCompaniesError)
+
 		return context.JSON(
 			nethttp.StatusInternalServerError,
 			httpMapper.ToErrorResponse("INTERNAL_SERVER_ERROR", "failed to list companies"),
@@ -49,6 +62,8 @@ func (companyHandler *CompanyHandler) CreateCompany(context echo.Context) error 
 	}
 
 	temporaryUserId := config.GetEnv("DEV_SUPABASE_USER_ID", "")
+	// TODO: replace with authenticated user id from middleware context
+
 	createCompanyInput := httpMapper.ToCreateCompanyInput(
 		temporaryUserId,
 		createCompanyRequest,
